@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>따뜻한 우리 반 상담 신청</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Gowun Dodum', sans-serif; background-color: #fcf9f2; color: #5c4d43; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { background-color: #ffffff; max-width: 500px; width: 100%; padding: 30px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h1 { text-align: center; color: #8b7355; font-size: 24px; margin-bottom: 5px; }
+        p.subtitle { text-align: center; color: #a39171; font-size: 14px; margin-bottom: 25px; }
+        .date-picker, .time-picker, .user-info { margin-bottom: 25px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #8b7355; }
+        input[type="date"], input[type="text"], input[type="number"] { width: 100%; padding: 12px; border: 2px solid #e8e3d9; border-radius: 10px; box-sizing: border-box; font-family: 'Gowun Dodum', sans-serif; font-size: 16px; color: #5c4d43; }
+        input:focus { outline: none; border-color: #c9b79c; }
+        .time-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .time-btn { background-color: #f4efe6; border: none; padding: 12px; border-radius: 10px; font-family: 'Gowun Dodum', sans-serif; font-size: 15px; color: #5c4d43; cursor: pointer; transition: all 0.2s; }
+        .time-btn:hover:not(:disabled) { background-color: #e3d7c5; }
+        .time-btn.selected { background-color: #8b7355; color: white; }
+        .time-btn:disabled { background-color: #f0f0f0; color: #bcbcbc; text-decoration: line-through; cursor: not-allowed; }
+        .submit-btn { width: 100%; background-color: #9ab49d; color: white; border: none; padding: 15px; border-radius: 10px; font-size: 18px; font-family: 'Gowun Dodum', sans-serif; cursor: pointer; margin-top: 10px; }
+        .submit-btn:hover:not(:disabled) { background-color: #849e87; }
+        .submit-btn:disabled { background-color: #bcbcbc; cursor: not-allowed; }
+        #loading-msg { text-align: center; color: #9ab49d; font-size: 14px; margin-bottom: 10px; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>선생님과 이야기 나누는 시간 🌿</h1>
+    <p class="subtitle">편안한 마음으로 원하는 날짜와 시간을 골라주세요.</p>
+
+    <div id="loading-msg">서버에서 예약 현황을 불러오는 중입니다... 잠시만 기다려주세요.</div>
+
+    <div class="date-picker">
+        <label for="date">1. 날짜를 선택해주세요</label>
+        <input type="date" id="date" onchange="updateTimeSlots()" min="2026-09-01" max="2026-09-30">
+    </div>
+
+    <div class="time-picker">
+        <label>2. 시간을 선택해주세요</label>
+        <div class="time-slots" id="time-slots">
+            <!-- 자바스크립트로 시간이 생성됩니다 -->
+        </div>
+    </div>
+
+    <div class="user-info">
+        <label for="student-id">3. 학번을 적어주세요</label>
+        <input type="number" id="student-id" placeholder="예: 30101">
+    </div>
+
+    <div class="user-info">
+        <label for="student-name">4. 이름을 적어주세요</label>
+        <input type="text" id="student-name" placeholder="이름 입력">
+    </div>
+
+    <button class="submit-btn" id="submit-btn" onclick="submitReservation()">상담 신청하기</button>
+</div>
+
+<script>
+    // ★★★ 3단계에서 복사한 웹 앱 URL을 아래 따옴표 안에 붙여넣으세요! ★★★
+    const SCRIPT_URL = '여기에_복사한_URL을_붙여넣으세요'; 
+    
+    let selectedTime = '';
+    let reservations = [];
+    const defaultTimes = ['08:00 ~ 08:30', '13:00 ~ 13:30', '15:00 ~ 15:30', '16:00 ~ 16:30'];
+
+    // 페이지 접속 시 구글 시트에서 예약 현황 불러오기
+    window.onload = async function() {
+        document.getElementById('loading-msg').style.display = 'block';
+        try {
+            const response = await fetch(SCRIPT_URL);
+            reservations = await response.json();
+            document.getElementById('loading-msg').style.display = 'none';
+            updateTimeSlots();
+        } catch (error) {
+            console.error(error);
+            document.getElementById('loading-msg').innerText = "예약 현황을 불러오는 데 실패했습니다. 새로고침 해주세요.";
+            document.getElementById('loading-msg').style.color = '#d69f9f';
+        }
+    }
+
+    function updateTimeSlots() {
+        const dateInput = document.getElementById('date').value;
+        const timeContainer = document.getElementById('time-slots');
+        timeContainer.innerHTML = '';
+        selectedTime = '';
+
+        if (!dateInput) return;
+
+        const dateObj = new Date(dateInput);
+        const dayOfWeek = dateObj.getDay(); 
+        const month = dateObj.getMonth() + 1;
+        const date = dateObj.getDate();
+
+        let availableTimes = [...defaultTimes];
+
+        // 1. 9월 24일, 25일 추석 연휴
+        if (month === 9 && (date === 24 || date === 25)) {
+            timeContainer.innerHTML = '<p style="grid-column: span 2; color: #d69f9f; text-align:center;">추석 연휴에는 상담이 없습니다. 푹 쉬고 만나요! 🌕</p>';
+            return;
+        }
+
+        // 2. 화요일(2), 목요일(4)
+        if (dayOfWeek === 2) {
+            availableTimes = availableTimes.filter(t => t !== '15:00 ~ 15:30' && t !== '16:00 ~ 16:30');
+        } else if (dayOfWeek === 4) {
+            availableTimes = availableTimes.filter(t => t !== '15:00 ~ 15:30');
+        }
+
+        // 3. 9월 7일 출장
+        if (month === 9 && date === 7) {
+            availableTimes = availableTimes.filter(t => t !== '16:00 ~ 16:30');
+        }
+
+        // 주말 제외
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+             timeContainer.innerHTML = '<p style="grid-column: span 2; color: #d69f9f; text-align:center;">주말은 푹 쉬고 평일에 만나요! 😊</p>';
+             return;
+        }
+
+        // 시간 버튼 생성 및 마감 처리
+        availableTimes.forEach(time => {
+            const btn = document.createElement('button');
+            btn.className = 'time-btn';
+            btn.innerText = time;
+            
+            // 구글 시트에 이미 해당 날짜와 시간에 예약이 있는지 확인
+            const isBooked = reservations.some(r => r.date === dateInput && r.time === time);
+            if (isBooked) {
+                btn.disabled = true;
+                btn.innerText += ' (마감)';
+            } else {
+                btn.onclick = () => selectTime(btn, time);
+            }
+            
+            timeContainer.appendChild(btn);
+        });
+    }
+
+    function selectTime(button, time) {
+        document.querySelectorAll('.time-btn').forEach(btn => btn.classList.remove('selected'));
+        button.classList.add('selected');
+        selectedTime = time;
+    }
+
+    async function submitReservation() {
+        const date = document.getElementById('date').value;
+        const studentId = document.getElementById('student-id').value;
+        const name = document.getElementById('student-name').value;
+
+        if (!date || !selectedTime || !studentId || !name) {
+            alert('날짜, 시간, 학번, 이름을 모두 확인해주세요!');
+            return;
+        }
+
+        const newReservation = { date, time: selectedTime, studentId, name };
+        
+        // 버튼 비활성화 (중복 클릭 방지)
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.innerText = "예약 정보를 구글 시트로 보내는 중입니다...";
+        submitBtn.disabled = true;
+
+        try {
+            // 구글 시트로 데이터 전송
+            await fetch(SCRIPT_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8',
+                },
+                body: JSON.stringify(newReservation)
+            });
+
+            alert(`${name} 학생, ${date} ${selectedTime}에 상담 예약이 완료되었습니다! 👏`);
+            
+            // 현재 화면에도 즉시 반영
+            reservations.push(newReservation);
+            document.getElementById('student-id').value = '';
+            document.getElementById('student-name').value = '';
+            updateTimeSlots(); 
+
+        } catch (error) {
+            alert('오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+            console.error(error);
+        } finally {
+            submitBtn.innerText = "상담 신청하기";
+            submitBtn.disabled = false;
+        }
+    }
+</script>
+
+</body>
+</html>
